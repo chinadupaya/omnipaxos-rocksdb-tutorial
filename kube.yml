@@ -147,3 +147,14 @@ spec:
           command: ["/bin/sh", "-c"]
           # As the program does not allow to have PID=0, we need to increment the PID by 1
           args: ["export PID=$(echo $POD_NAME | sed 's/[^0-9]*\\([0-9]*\\)$/\\1/')&& PID=$((PID + 1)) && exec kv_demo"]
+  volumeClaimTemplates:
+  - metadata:
+      name: www
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: standard
+      resources:
+        requests:
+          storage: 10Mi #simplicity
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
