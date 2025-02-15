@@ -32,11 +32,6 @@ Attach to the client (`network-actor`) to send requests to the cluster:
 ```bash
 $ kubectl attach -it net
 ```
-Kill a pod:
-```bash
-$ kubectl delete pod <podname>
-```
-
 
 
 ### Client

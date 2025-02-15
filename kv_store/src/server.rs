@@ -45,28 +45,6 @@ impl Server {
         }
     }
 
-    async fn process_snapshots(&mut self) {
-        if let Some(e) = self.omni_paxos.read(self.last_decided_idx.try_into().unwrap()) {
-            match e {
-                LogEntry::Snapshotted(s) => {
-
-                },
-                LogEntry::Decided(s) => {
-
-                },
-                LogEntry::StopSign(s, b) => {
-
-                },
-                LogEntry::Undecided(_) => {
-
-                },
-                LogEntry::Trimmed(_) => {
-
-                }
-            }
-        }
-    }
-
     async fn send_outgoing_msgs(&mut self) {
         let messages = self.omni_paxos.outgoing_messages();
         for msg in messages {
@@ -78,9 +56,7 @@ impl Server {
     }
 
     async fn handle_decided_entries(&mut self) {
-        println!("Last decided index: {}", self.last_decided_idx);
         let new_decided_idx = self.omni_paxos.get_decided_idx();
-        println!("New decided index: {} ", new_decided_idx);
         if self.last_decided_idx < new_decided_idx as u64 {
             let decided_entries = self
                 .omni_paxos
@@ -97,9 +73,8 @@ impl Server {
                     "Log before: {:?}",
                     self.omni_paxos.read_decided_suffix(0).unwrap()
                 );
-                // change local_only s.t. all nodes take a snapshot
                 self.omni_paxos
-                    .snapshot(Some(new_decided_idx), false)
+                    .snapshot(Some(new_decided_idx), true)
                     .expect("Failed to snapshot");
                 println!(
                     "Log after: {:?}\n",

@@ -1,7 +1,7 @@
 use crate::kv::KVCommand;
 use crate::server::Server;
 use omnipaxos::*;
-use omnipaxos_storage::persistent_storage::{PersistentStorage, PersistentStorageConfig};
+use omnipaxos_storage::memory_storage::MemoryStorage;
 use std::env;
 use tokio;
 
@@ -31,23 +31,10 @@ lazy_static! {
     };
 }
 
-type OmniPaxosKV = OmniPaxos<KVCommand, PersistentStorage<KVCommand>>;
+type OmniPaxosKV = OmniPaxos<KVCommand, MemoryStorage<KVCommand>>;
 
 #[tokio::main]
 async fn main() {
-    // user-defined configuration
-    let my_path = "my_storage";
-    let log_store_options = rocksdb::Options::default();
-    let mut state_store_options = rocksdb::Options::default();
-    state_store_options.create_missing_column_families(true); // required
-    state_store_options.create_if_missing(true); // required
-
-    // generate default configuration and set user-defined options
-    let mut my_config = PersistentStorageConfig::default();
-    my_config.set_path(my_path.to_string());
-    my_config.set_database_options(state_store_options);
-    my_config.set_log_options(log_store_options);
-
     let server_config = ServerConfig {
         pid: *PID,
         election_tick_timeout: 5,
@@ -63,7 +50,7 @@ async fn main() {
         cluster_config,
     };
     let omni_paxos = op_config
-        .build(PersistentStorage::open(my_config))
+        .build(MemoryStorage::default())
         .expect("failed to build OmniPaxos");
     let mut server = Server {
         omni_paxos,
