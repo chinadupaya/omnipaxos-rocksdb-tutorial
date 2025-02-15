@@ -6,8 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-omnipaxos = { git = "https://github.com/haraldng/omnipaxos", rev = "1b6dd0d84c2c74dd1ed0dd73fad6ce980d9a1c5a" , features = ["serde", "macros"] }
-omnipaxos_storage = { git = "https://github.com/haraldng/omnipaxos", rev = "1b6dd0d84c2c74dd1ed0dd73fad6ce980d9a1c5a" }
+omnipaxos = { git = "https://github.com/haraldng/omnipaxos",rev="c9d3ad56b745c4e589bf491cf43d25dc9572dc11", features = ["serde", "macros"] }
+omnipaxos_storage = { git = "https://github.com/haraldng/omnipaxos", rev="c9d3ad56b745c4e589bf491cf43d25dc9572dc11"}
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "net", "io-util", "time"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"
