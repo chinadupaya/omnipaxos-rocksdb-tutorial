@@ -19,13 +19,14 @@ lazy_static! {
     } else {
         vec![]
     };
-    pub static ref PID: u64 = if let Ok(var) = env::var("PID") {
-        let x = var.parse().expect("PIDs must be u64");
-        if x == 0 {
-            panic!("PIDs cannot be 0")
-        } else {
-            x
+    pub static ref PID: u64 = if let Ok(var) = env::var("POD_NAME") {
+        let parts: Vec<&str> = var.split('-').collect();
+        if parts.len() < 3 {
+            panic!("POD_NAME must have at least 3 parts separated by hyphens");
         }
+        let mut x = parts[2].parse().expect("PIDs must be u64");
+        x += 1; // cannot be zero
+        x
     } else {
         panic!("missing PID")
     };

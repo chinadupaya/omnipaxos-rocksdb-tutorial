@@ -26,7 +26,6 @@ spec:
     - port: 8003
       name: "8003"
       targetPort: 8003
-      name: "8003"
     - port: 8004
       targetPort: 8004
       name: "8004"
@@ -109,7 +108,20 @@ spec:
               name: kv-config
               key: RUST_BACKTRACE
 ---
-
+apiVersion: v1
+kind: Service
+metadata:
+  name: kv-store
+  labels:
+    app: kv-store
+spec:
+  clusterIP: None  # Headless service, no single IP
+  selector:
+    app: kv-store
+  ports:
+    - port: 8000
+      name: "kv-port"
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -127,7 +139,7 @@ spec:
     spec:
       containers:
         - name: kv-store
-          image: arejula27/kvs:v1.1 # Replace with your actual image
+          image: chinadupaya/kvs:latest # Replace with your actual image
           imagePullPolicy: Always
           env:
             - name: NODES
@@ -147,3 +159,4 @@ spec:
           command: ["/bin/sh", "-c"]
           # As the program does not allow to have PID=0, we need to increment the PID by 1
           args: ["export PID=$(echo $POD_NAME | sed 's/[^0-9]*\\([0-9]*\\)$/\\1/')&& PID=$((PID + 1)) && exec kv_demo"]
+      restartPolicy: Always

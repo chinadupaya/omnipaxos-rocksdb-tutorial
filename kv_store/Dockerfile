@@ -4,7 +4,8 @@ WORKDIR /usr/src/kv_demo
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
-        libclang-dev
+        libclang-dev && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # cache dependencies
 RUN cargo init --bin
@@ -19,5 +20,6 @@ COPY . .
 RUN cargo install --path .
 
 FROM debian:bullseye-slim
+RUN apt update && apt install -y dnsutils && apt-get clean && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /usr/local/cargo/bin/kv_demo /usr/local/bin/kv_demo
 CMD ["kv_demo"]
