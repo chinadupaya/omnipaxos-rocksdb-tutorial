@@ -4,13 +4,15 @@ use omnipaxos::*;
 use omnipaxos_storage::memory_storage::MemoryStorage;
 use std::env;
 use tokio;
-
+use std::sync::Arc;
+use tokio::sync::Mutex;
 #[macro_use]
 extern crate lazy_static;
 
 mod database;
 mod kv;
 mod network;
+mod networkk8s;
 mod server;
 
 lazy_static! {
@@ -35,7 +37,7 @@ lazy_static! {
 type OmniPaxosKV = OmniPaxos<KVCommand, MemoryStorage<KVCommand>>;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server_config = ServerConfig {
         pid: *PID,
         election_tick_timeout: 5,
@@ -53,11 +55,14 @@ async fn main() {
     let omni_paxos = op_config
         .build(MemoryStorage::default())
         .expect("failed to build OmniPaxos");
+
     let mut server = Server {
         omni_paxos,
-        network: network::Network::new().await,
+        network:  Arc::new(Mutex::new(networkk8s::Network::new().await)),
+        // network: networkk8s::Network::new().await,
         database: database::Database::new(format!("db_{}", *PID).as_str()),
         last_decided_idx: 0,
     };
     server.run().await;
+    Ok(())
 }
