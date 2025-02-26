@@ -1,11 +1,11 @@
-FROM rust:1.70 as builder
+FROM rust:1.85 as builder
 WORKDIR /usr/src/kv_demo
 
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
         libclang-dev && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+        apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # cache dependencies
 RUN cargo init --bin
@@ -19,7 +19,7 @@ RUN rm ./src/*.rs ./target/release/deps/kv_demo*
 COPY . .
 RUN cargo install --path .
 
-FROM debian:bullseye-slim
-RUN apt update && apt install -y dnsutils && apt-get clean && rm -rf /var/lib/apt/lists/*
+FROM debian:bookworm-slim
+RUN apt update && apt install -y dnsutils libstdc++6 libc6 && apt-get clean && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /usr/local/cargo/bin/kv_demo /usr/local/bin/kv_demo
 CMD ["kv_demo"]

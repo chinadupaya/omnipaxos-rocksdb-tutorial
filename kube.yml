@@ -120,6 +120,7 @@ spec:
     app: kv-store
   ports:
     - port: 8000
+      targetPort: 8000
       name: "kv-port"
 ---
 apiVersion: apps/v1
@@ -159,4 +160,27 @@ spec:
           command: ["/bin/sh", "-c"]
           # As the program does not allow to have PID=0, we need to increment the PID by 1
           args: ["export PID=$(echo $POD_NAME | sed 's/[^0-9]*\\([0-9]*\\)$/\\1/')&& PID=$((PID + 1)) && exec kv_demo"]
-      restartPolicy: Always
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pod-watcher
+  namespace: default
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["watch", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pod-watcher-binding
+  namespace: default
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: pod-watcher
+  apiGroup: rbac.authorization.k8s.io
