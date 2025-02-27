@@ -43,37 +43,35 @@ impl Network {
 
     /// Returns all messages received since last called.
     pub(crate) async fn get_received(&mut self) -> Vec<Message> {
-        println!("Getting received messages");
+        // println!("Getting received messages");
         let mut buf = self.incoming_msg_buf.lock().await;
         let ret = buf.to_vec();
         buf.clear();
         ret
     }
-    pub async fn connect_pod(&mut self, pod_name: &str, pod_ip: &str, pod_id: u64) {
-        println!("Connecting pod {:?}", pod_name);
-        println!("My API Addr: {}", Self::get_my_api_addr());
+    pub async fn connect_pod(&mut self, pod_name: &str, pod_id: u64) {
         let my_connection;
         if pod_name.starts_with("net") {
+            println!("My API Addr: {}", Self::get_my_api_addr());
             my_connection = Self::get_my_api_addr();
         } else {
             println!("Get peer address: {:?}", Self::get_peer_addr(pod_id));
             my_connection = Self::get_peer_addr(pod_id);
         }
-        let stream = TcpStream::connect(my_connection.clone()).await.unwrap();
-        let (_read_half, write_half) = stream.into_split();
-        let msg_buf = self.incoming_msg_buf.clone();
-        
-        println!("Pod name: {:?}", pod_name);
+        let stream = TcpStream::connect(my_connection.clone()).await.unwrap(); // name resolution error occurs here
+        let (read_half, write_half) = stream.into_split();
         let pod_name_copy = pod_name.to_string();
         if pod_name.starts_with("kv-store") {
             println!("kv-store pod");
             let mut sockets = self.sockets.lock().await;
             sockets.insert(pod_id, write_half);
+            let incoming_msg_buf = self.incoming_msg_buf.clone();
             tokio::spawn(async move {
-                let mut reader = BufReader::new(_read_half);
+                let mut reader = BufReader::new(read_half);
                 let mut data = Vec::new();
                 loop {
                     data.clear();
+                    println!("Waiting for data from {}", pod_name_copy);
                     let bytes_read = reader.read_until(b'\n', &mut data).await;
                     if bytes_read.is_err() {
                         // stream ended?
@@ -85,9 +83,11 @@ impl Network {
                     } else {
                         println!("stream alive with {}" , pod_name_copy);
                     }
+                    println!("Bytes received from {}: {:?}", pod_name_copy, data);
                     let msg: Message =
                         serde_json::from_slice(&data).expect("could not deserialize msg");
-                    msg_buf.lock().await.push(msg);
+                    let mut msg_buf = incoming_msg_buf.lock().await;
+                    msg_buf.push(msg);
                 }
             });
         } else if pod_name.starts_with("net") {
@@ -95,10 +95,11 @@ impl Network {
             self.api_socket = Some(write_half);
             let msg_buf = self.incoming_msg_buf.clone();
             tokio::spawn(async move {
-                let mut reader = BufReader::new(_read_half);
+                let mut reader = BufReader::new(read_half);
                 let mut data = Vec::new();
                 loop {
                     data.clear();
+                    println!("Waiting for data from {}", pod_name_copy);
                     let bytes_read = reader.read_until(b'\n', &mut data).await;
                     if bytes_read.is_err() {
                         // stream ended?
@@ -117,76 +118,6 @@ impl Network {
             });
         }
     }
-
-
-    // pub async fn connect_pod(&mut self, pod_name: &str, pod_ip: &str, pod_id: u64) {
-    //     println!("Connecting pod {:?}", pod_name);
-    //     println!("My API Addr: {}", Self::get_my_api_addr());
-    //     let my_connection;
-    //     if pod_name.starts_with("net") {
-    //         my_connection = Self::get_my_api_addr();
-    //     } else {
-       
-    //         my_connection = Self::get_peer_addr(pod_id);
-    //     }
-    //     match TcpStream::connect(my_connection.clone()).await {
-    //         Ok(stream) => {
-    //             let (_read_half, write_half) = stream.into_split();
-    //             let pod_name_copy = pod_name.to_string();
-    //             println!("Pod name: {:?}", pod_name_copy);
-    //             if pod_name.starts_with("kv-store") {
-    //                 println!("kv-store pod");
-    //                 let mut sockets = self.sockets.lock().await;
-    //                 sockets.insert(pod_id, write_half);
-    //                 let msg_buf = self.incoming_msg_buf.clone();
-    //                 tokio::spawn(async move {
-    //                     let mut reader = BufReader::new(_read_half);
-    //                     let mut data = Vec::new();
-    //                     loop {
-    //                         data.clear();
-    //                         let bytes_read = reader.read_until(b'\n', &mut data).await;
-    //                         if bytes_read.is_err() {
-    //                             // stream ended?
-    //                             println!("stream ended error {}" , pod_name_copy);
-    //                             panic!("stream ended?")
-    //                         } else if bytes_read.unwrap() == 0 {
-    //                             println!("stream ended {}" , pod_name_copy);
-    //                             // panic!("stream ended?")
-    //                         } else {
-    //                             println!("stream alive with {}" , pod_name_copy);
-    //                         }
-    //                         let msg: Message =
-    //                             serde_json::from_slice(&data).expect("could not deserialize msg");
-    //                         msg_buf.lock().await.push(msg);
-    //                     }
-    //                 });
-    //             } else if pod_name.starts_with("net") {
-    //                 println!("net pod");
-    //                 self.api_socket = Some(write_half);
-    //                 let msg_buf = self.incoming_msg_buf.clone();
-    //                 tokio::spawn(async move {
-    //                     let mut reader = BufReader::new(_read_half);
-    //                     let mut data = Vec::new();
-    //                     loop {
-    //                         data.clear();
-    //                         let bytes_read = reader.read_until(b'\n', &mut data).await;
-    //                         if bytes_read.is_err() {
-    //                             // stream ended?
-    //                             panic!("stream ended?")
-    //                         }
-    //                         let msg: Message =
-    //                             serde_json::from_slice(&data).expect("could not deserialize msg");
-    //                         msg_buf.lock().await.push(msg);
-    //                     }
-    //                 });
-    //             }
-    //             println!("Connected to pod: {} at {}", pod_name, my_connection);
-    //         }
-    //         Err(e) => {
-    //             eprintln!("Failed to connect to pod {}: {}", pod_name, e);
-    //         }
-    //     }
-    // }
 
 
     /// Sends the message to the receiver.
@@ -226,41 +157,37 @@ impl Network {
         while let Some(status) = stream.try_next().await.unwrap() {
             match status {
                 WatchEvent::Added(pod) => {
-                    println!("Pod added: {}",pod.metadata.name.as_deref().unwrap_or("unknown"));
-                    if let Some(pod_name) = pod.metadata.name {
-                        println!("Pod name {:?}", pod_name);
-                        if let Some(status) = pod.status {
-                            println!("Pod status {:?}", status);
-                            if let Some(pod_ip) = status.pod_ip {
-                                if pod_name.starts_with("kv-store") || pod_name.starts_with("net") {
-                                    // let mut net = self.sockets.lock().await; // Access the Network instance
-                                    let mut pod_id = 0; // Generate a unique ID for kv-store
+                    println!("Pod ADDED: {}",pod.metadata.name.as_deref().unwrap_or("unknown"));
+                    if let Some(pod_name) = pod.metadata.name { 
+                        // println!("Pod name {:?}", pod_name);
+                
+                        if (pod_name.starts_with("kv-store") || pod_name.starts_with("net")) && pod_name != format!("kv-store-{}", *MY_PID - 1) {
+                            let mut pod_id = 0; // defaults to client
 
-                                    let parts: Vec<&str> = pod_name.split('-').collect();
-                                    if parts.len() >= 3 {
-                                        let mut x = parts[2].parse().expect("PIDs must be u64");
-                                        x += 1; // cannot be zero
-                                        pod_id = x;
-                                    }
-                                    self.connect_pod(&pod_name, &pod_ip, pod_id).await;
-                                }
+                            let parts: Vec<&str> = pod_name.split('-').collect();
+                            if parts.len() >= 3 {
+                                let mut x = parts[2].parse().expect("PIDs must be u64");
+                                x += 1;
+                                pod_id = x;
                             }
+                            println!("{} is attempting connection to pod {}", format!("kv-store-{}", *MY_PID - 1), pod_name);
+                            self.connect_pod(&pod_name, pod_id).await;
                         }
+                            
+                        
                     }
-                    // if pod name is "net", set api_socket
 
                 }
                 WatchEvent::Modified(pod) => {
-                    println!("Pod modified: {}", pod.metadata.name.as_deref().unwrap_or("unknown"));
-                    if let Some(pod_name) = pod.metadata.name {
-                        println!("Pod name {:?}", pod_name);
-                        if let Some(status) = pod.status {
-                            println!("Pod status {:?}", status);
-                        }
-                    }
+                    println!("Pod MODIFIED: {}", pod.metadata.name.as_deref().unwrap_or("unknown"));
+                    // if let Some(pod_name) = pod.metadata.name {
+                    //     println!("Pod name {:?}", pod_name);
+                    //     println!("Pod status {:?}", pod.status);
+                        
+                    // }
                 }
                 WatchEvent::Deleted(pod) => {
-                    println!("Pod deleted: {}", pod.metadata.name.as_deref().unwrap_or("unknown"));
+                    println!("Pod DELETED: {}", pod.metadata.name.as_deref().unwrap_or("unknown"));
                 }
                 _ => {}
             }

@@ -32,7 +32,7 @@ pub struct Server {
 
 impl Server {
     async fn process_incoming_msgs(&mut self) {
-        println!("Processing incoming msgs");
+        // println!("Processing incoming msgs");
         let messages = self.network.lock().await.get_received().await;
         for msg in messages {
             match msg {
@@ -52,13 +52,12 @@ impl Server {
                     println!("omnipaxos msg {:?}", msg);
                     self.omni_paxos.handle_incoming(msg);
                 }
-                _ => println!("Unimplemented! {:?}", msg),
+                _ => println!("Unimplemented msg! {:?}", msg),
             }
         }
     }
 
     async fn send_outgoing_msgs(&mut self) {
-        println!("send_outgoing_msgs");
         let messages = self.omni_paxos.outgoing_messages();
         for msg in messages {
             let receiver = msg.get_receiver();
@@ -76,7 +75,7 @@ impl Server {
 
     async fn handle_decided_entries(&mut self) {
         let new_decided_idx = self.omni_paxos.get_decided_idx();
-        println!("handle_decided_entries {:?}", new_decided_idx);
+        // println!("handle_decided_entries {:?}", new_decided_idx);
         if self.last_decided_idx < new_decided_idx as u64 {
             let decided_entries = self
                 .omni_paxos
