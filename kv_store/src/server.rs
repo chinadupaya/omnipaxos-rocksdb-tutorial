@@ -43,7 +43,9 @@ impl Server {
                 Message::OmniPaxosMsg(msg) => {
                     self.omni_paxos.handle_incoming(msg);
                 }
-                _ => unimplemented!(),
+                _ => {
+                    println!("Received unimplemented msg {:?}", msg);
+                },
             }
         }
     }

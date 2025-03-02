@@ -3,7 +3,7 @@ kind: ConfigMap
 metadata:
   name: kv-config
 data:
-  NODES: "[1, 2, 3, 4]"
+  NODES: "[1, 2, 3]"
   RUST_BACKTRACE: "1"
 ---
 apiVersion: v1

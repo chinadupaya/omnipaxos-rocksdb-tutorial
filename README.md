@@ -28,7 +28,6 @@ $ docker attach network-actor
 
 ```bash
 $ docker build -t kvs .
-$ docker build -t kvs-network-actor .
 ```
 Sometimes it's better to rebuild completely from scratch: 
 ```bash
@@ -36,10 +35,13 @@ $ docker build -t kvs . --no-cache
 ```
 ```bash
 $ docker tag kvs:latest chinadupaya/kvs:latest
-$ docker tag kvs-network-actor:latest chinadupaya/kvs-network-actor
-```
-```bash
 $ docker push chinadupaya/kvs:latest
+```
+
+# Build new image in the network_actor folder:
+```bash
+$ docker build -t kvs-network-actor .
+$ docker tag kvs-network-actor:latest chinadupaya/kvs-network-actor
 $ docker push chinadupaya/kvs-network-actor:latest
 ```
 
@@ -60,7 +62,12 @@ Cleanup:
 $ minikube delete --all
 ```
 
-Add another pod:
+## Add another pod:
+- Edit nodes config
+```bash
+$ kubectl patch configmap kv-config --type merge -p '{"data":{"NODES":"[1,2,3,4]"}}'
+```
+- increase to four pods
 ```bash
 $ kubectl scale statefulset kv-store --replicas=4
 ```
