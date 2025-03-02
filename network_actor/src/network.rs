@@ -226,6 +226,11 @@ fn parse_command(line: String) -> Result<(KVCommand, Option<u64>), ParseCommandE
                 "Commands: put <key> <value>, get <key>, delete <key> (optional <port>)".into(),
             ));
         }
+        "reconfigure" => {
+            let value = words.next().ok_or(ParseCommandError("Not enough arguments".to_string()))?;
+            let port = words.next().map(|x| x.parse::<u64>().unwrap());
+            (KVCommand::Reconfigure(value.to_string()), port.into())
+        }
         _ => Err(ParseCommandError("Invalid command type".to_string()))?,
     };
     Ok(command)

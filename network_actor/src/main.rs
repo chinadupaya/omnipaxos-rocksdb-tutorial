@@ -45,6 +45,7 @@ pub enum KVCommand {
     Put(KeyValue),
     Delete(String),
     Get(String),
+    Reconfigure(String)
 }
 
 /// Same as in KV demo

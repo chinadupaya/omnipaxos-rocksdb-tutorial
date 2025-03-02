@@ -24,6 +24,10 @@ impl Database {
                 None
             }
             KVCommand::Get(key) => self.get(key.as_str()),
+            KVCommand::Reconfigure(key) => {
+                println!("DB handle reconfigure {}", key);
+                None
+            },
         }
     }
 

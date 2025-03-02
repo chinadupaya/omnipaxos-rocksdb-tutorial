@@ -24,7 +24,30 @@ Attach to the client (`network-actor`) to send requests to the cluster:
 $ docker attach network-actor
 ```
 
-It is also possible to run with kubernetes:
+# Build new image in the kv_store folder:
+
+```bash
+$ docker build -t kvs .
+$ docker build -t kvs-network-actor .
+```
+Sometimes it's better to rebuild completely from scratch: 
+```bash
+$ docker build -t kvs . --no-cache
+```
+```bash
+$ docker tag kvs:latest chinadupaya/kvs:latest
+$ docker tag kvs-network-actor:latest chinadupaya/kvs-network-actor
+```
+```bash
+$ docker push chinadupaya/kvs:latest
+$ docker push chinadupaya/kvs-network-actor:latest
+```
+
+# With Minikube:
+```bash
+$ minikube start
+```
+
 ```bash
 $ kubectl create -f kube.yml 
 ```
@@ -32,11 +55,15 @@ Attach to the client (`network-actor`) to send requests to the cluster:
 ```bash
 $ kubectl attach -it net
 ```
-Kill a pod:
+Cleanup:
 ```bash
-$ kubectl delete pod <podname>
+$ minikube delete --all
 ```
 
+Add another pod:
+```bash
+$ kubectl scale statefulset kv-store --replicas=4
+```
 ### Client
 Example network-actor CLI command:
 ```

@@ -33,6 +33,9 @@ impl Server {
                         let msg = Message::APIResponse(APIResponse::Get(key, value));
                         self.network.send(0, msg).await;
                     }
+                    KVCommand::Reconfigure(key) => {
+                        println!("Received reconfigure {}", key);
+                    }
                     cmd => {
                         self.omni_paxos.append(cmd).unwrap();
                     }
@@ -111,6 +114,15 @@ impl Server {
                 },
                 else => (),
             }
+        }
+    }
+
+    pub async fn new(omni_paxos: OmniPaxosKV, db_path: &str) -> Self {
+        Self {
+            omni_paxos,
+            network: Network::new().await,
+            database: Database::new(db_path),
+            last_decided_idx: 0,
         }
     }
 }
