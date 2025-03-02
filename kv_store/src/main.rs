@@ -33,6 +33,16 @@ lazy_static! {
     } else {
         panic!("missing PID")
     };
+    pub static ref CONFIG_ID: u32 = if let Ok(var) = env::var("CONFIG_ID") {
+        let x = var.parse().expect("PIDs must be u32");
+        if x == 0 {
+            panic!("CONFIG_IDs cannot be 0")
+        } else {
+            x
+        }
+    } else {
+        panic!("missing CONFIG_ID")
+    };
 }
 
 type OmniPaxosKV = OmniPaxos<KVCommand, PersistentStorage<KVCommand>>;
@@ -45,7 +55,7 @@ async fn main() {
         ..Default::default()
     };
     let cluster_config = ClusterConfig {
-        configuration_id: 1,
+        configuration_id: *CONFIG_ID,
         nodes: (*NODES).clone(),
         ..Default::default()
     };
@@ -118,14 +128,14 @@ async fn main() {
 
                 // ✅ Log leader status instead of calling trigger_election()
                 if leader.is_none() {
-                     println!("No leader detected! Restarting node to trigger election");
+                    println!("No leader detected! Restarting node to trigger election");
             
-            // Remove lock to allow restart
+                    // Remove lock to allow restart
                     let _ = std::fs::remove_file(format!("/data/omnipaxos_storage_{}/LOCK", *PID));
-            
-            // Restart process (optional: implement restart logic)
-                std::process::exit(1);
-        }
+                    
+                    // Restart process (optional: implement restart logic)
+                    std::process::exit(1);
+                }
 
                 tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
             }

@@ -66,6 +66,12 @@ $ minikube delete --all
 - Edit nodes config
 ```bash
 $ kubectl patch configmap kv-config --type merge -p '{"data":{"NODES":"[1,2,3,4]"}}'
+$ kubectl patch configmap kv-config --type merge -p '{"data":{"CONFIG_ID":"2"}}'
+```
+
+- Attach to network-actor and input reconfigure. This tells it to send a stopsign that a new node will be added
+```bash
+$ reconfigure 8004
 ```
 - increase to four pods
 ```bash
