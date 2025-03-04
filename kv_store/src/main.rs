@@ -55,7 +55,7 @@ async fn main() {
         ..Default::default()
     };
     let cluster_config = ClusterConfig {
-        configuration_id: *CONFIG_ID,
+        configuration_id: (*CONFIG_ID).clone(),
         nodes: (*NODES).clone(),
         ..Default::default()
     };
@@ -64,7 +64,6 @@ async fn main() {
         cluster_config,
     };
     let storage_path = format!("/data/omnipaxos_storage_{}", *PID);
-    let backup_path = format!("/data/omnipaxos_storage_backup_{}", *PID);
     let db_path = "/data/db";
 
     fn remove_lock_file(path: &str) {
@@ -84,14 +83,7 @@ async fn main() {
         println!("✅ Primary PersistentStorage opened successfully.");
         persistent_storage_primary
     } else {
-        println!("⚠️ WARNING: Primary storage failed, switching to backup...");
-        let persistent_storage_backup = PersistentStorage::open(PersistentStorageConfig::with_path(backup_path.clone()));
-        if let PersistentStorage { .. } = persistent_storage_backup {
-            println!("✅ Backup PersistentStorage opened successfully.");
-            persistent_storage_backup
-        } else {
-            panic!("❌ CRITICAL: Failed to open both primary and backup PersistentStorage!");
-        }
+        panic!("!!Failed to open PersistentStorage!!");
     };
 
     let omni_paxos_result = op_config.clone().build(persistent_storage);

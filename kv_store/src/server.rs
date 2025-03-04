@@ -4,18 +4,24 @@ use crate::{
     network::{Message, Network},
     OmniPaxosKV,
     NODES,
-    PID as MY_PID
+    PID as MY_PID,
+    CONFIG_ID
+
 };
 
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::fs;
+use std::thread::current;
+use std::{env, fs};
 use tokio::sync::Mutex;
+// use omnipaxos::messages::ballot_leader_election::{BLEMessage, HeartbeatMsg };
+use omnipaxos::messages::ballot_leader_election::*;
 
 use omnipaxos_storage::persistent_storage::{PersistentStorage, PersistentStorageConfig};
 use omnipaxos::{ClusterConfig, ServerConfig};
 use omnipaxos::util::LogEntry;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::time;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,11 +35,14 @@ pub struct Server {
     pub network: Network,
     pub database: Database,
     pub last_decided_idx: u64,
+    pub heartbeats: HashMap<u64, Instant>,
+    pub expired_nodes: HashSet<u64>
 }
 
 impl Server {
     async fn process_incoming_msgs(&mut self) {
         let messages = self.network.get_received().await;
+         // should ignore message from client (PID = 0)
         for msg in messages {
             match msg {
                 Message::APIRequest(kv_cmd) => match kv_cmd {
@@ -61,6 +70,12 @@ impl Server {
                     }
                 },
                 Message::OmniPaxosMsg(msg) => {
+                    println!("omnipaxos msg {:?}", msg);
+                    // if i am the leader
+                    let leader = self.omni_paxos.get_current_leader();
+                    let sender = msg.get_sender();
+                    self.heartbeats.insert(sender, Instant::now());
+                    self.expired_nodes.remove(&sender);
                     self.omni_paxos.handle_incoming(msg);
                 }
                 _ => {
@@ -83,11 +98,22 @@ impl Server {
     async fn handle_decided_entries(&mut self) {
         let new_decided_idx = self.omni_paxos.get_decided_idx();
         if self.last_decided_idx < new_decided_idx as u64 {
-            let decided_entries = self
-                .omni_paxos
-                .read_decided_suffix(self.last_decided_idx as usize)
-                .unwrap();
-            self.update_database(decided_entries);
+            // let decided_entries = self
+            //     .omni_paxos
+            //     .read_decided_suffix(self.last_decided_idx as usize)
+            //     .unwrap();
+            // self.update_database(decided_entries);
+            println!(
+                "Reading decided suffix from index: {} (new_decided_idx: {})",
+                self.last_decided_idx, new_decided_idx
+            );
+            if let Some(decided_entries) = self.omni_paxos.read_decided_suffix(self.last_decided_idx as usize) {
+                self.update_database(decided_entries);
+            } else {
+                println!("Warning: No decided entries found at index {}", self.last_decided_idx);
+                self.omni_paxos.reconnected(*MY_PID);
+                // self.omni_paxos.read
+            }
             self.last_decided_idx = new_decided_idx as u64;
             /*** reply client ***/
             let msg = Message::APIResponse(APIResponse::Decided(new_decided_idx as u64));
@@ -103,31 +129,33 @@ impl Server {
                     .expect("Failed to snapshot");
                 println!(
                     "Log after: {:?}\n",
-                    self.omni_paxos.read_decided_suffix(0).unwrap()
+                self.omni_paxos.read_decided_suffix(0).unwrap()
                 );
             }
         }
     }
 
-    async fn update_database(&self, decided_entries: Vec<LogEntry<KVCommand>>) {
+    fn update_database(&self, decided_entries: Vec<LogEntry<KVCommand>>) {
         for entry in decided_entries {
             match entry {
                 LogEntry::Decided(cmd) => {
                     self.database.handle_command(cmd);
                 }
                 LogEntry::StopSign(stopsign, true) => {
-                    let current_config = ServerConfig {
-                        pid: *MY_PID,
-                        ..Default::default()
-                    };
-                    let new_configuration = stopsign.next_config; 
-                    if new_configuration.nodes.contains(&MY_PID) {
+                    println!("Received stopsign");
+                    
+                    let new_configuration = stopsign.next_config.clone(); 
+                    if new_configuration.nodes.contains(&MY_PID) && stopsign.next_config.configuration_id > *CONFIG_ID{
                         // current configuration has been safely stopped. Start new instance
+                        // force restart
+                         // Remove lock to allow restart
+                        // let _ = std::fs::remove_file(format!("/data/omnipaxos_storage_{}/LOCK", *PID));
+                        
+                        // Restart process (optional: implement restart logic)
+                        // std::process::exit(1);
 
                         let storage_path = format!("/data/omnipaxos_storage_{}", *MY_PID);
-                        let backup_path = format!("/data/omnipaxos_storage_backup_{}", *MY_PID);
                         let db_path = "/data/db";
-
                         fn remove_lock_file(path: &str) {
                             let lock_file = format!("{}/LOCK", path);
                             if std::path::Path::new(&lock_file).exists() {
@@ -135,82 +163,18 @@ impl Server {
                                 fs::remove_file(&lock_file).expect("Failed to remove lock file");
                             }
                         }
-
                         remove_lock_file(&storage_path);
                         remove_lock_file(db_path);
-
-                        let persistent_storage_primary: PersistentStorage<KVCommand> = PersistentStorage::open(PersistentStorageConfig::with_path(storage_path.clone()));
-
-                        let persistent_storage = if let PersistentStorage { .. } = persistent_storage_primary {
-                            println!("✅ Primary PersistentStorage opened successfully.");
-                            persistent_storage_primary
-                        } else {
-                            println!("⚠️ WARNING: Primary storage failed, switching to backup...");
-                            let persistent_storage_backup = PersistentStorage::open(PersistentStorageConfig::with_path(backup_path.clone()));
-                            if let PersistentStorage { .. } = persistent_storage_backup {
-                                println!("✅ Backup PersistentStorage opened successfully.");
-                                persistent_storage_backup
-                            } else {
-                                panic!("❌ CRITICAL: Failed to open both primary and backup PersistentStorage!");
-                            }
+                        
+                        let persistent_storage: PersistentStorage<KVCommand> = PersistentStorage::open(PersistentStorageConfig::with_path(storage_path.clone()));
+                        let current_config = ServerConfig {
+                            pid: *MY_PID,
+                            ..Default::default()
                         };
-                        let omni_paxos_result = new_configuration.build_for_server(current_config.clone(), persistent_storage);
-
-                        // use new_omnipaxos
-
-                        if let Ok(omni_paxos) = omni_paxos_result {
-                            // ✅ Use Arc<Mutex<T>> to allow multiple async tasks to access `server`
-                            let server = Arc::new(Mutex::new(Server::new(omni_paxos, db_path).await));
-                    
-                            // ✅ Clone `server` to avoid move issues
-                            let server_clone = Arc::clone(&server);
-                    
-                            tokio::spawn(async move {
-                                loop {
-                                    let decided_idx;
-                                    let last_decided_idx;
-                                    let leader;
-                    
-                                    {
-                                        let server_guard = server_clone.lock().await;
-                                        decided_idx = server_guard.omni_paxos.get_decided_idx();
-                                        last_decided_idx = server_guard.last_decided_idx as usize;
-                                        leader = server_guard.omni_paxos.get_current_leader();
-                                    }
-                    
-                                    // ✅ Ensure logs are in sync
-                                    if decided_idx < last_decided_idx {
-                                        println!("⚠️ Node is behind, requesting missing logs...");
-                                        let mut server_guard = server_clone.lock().await;
-                                        server_guard
-                                            .omni_paxos
-                                            .trim(Some(last_decided_idx))
-                                            .expect("Trim failed!");
-                                    }
-                    
-                                    // ✅ Log leader status instead of calling trigger_election()
-                                    if leader.is_none() {
-                                         println!("No leader detected! Restarting node to trigger election");
-                                
-                                // Remove lock to allow restart
-                                        let _ = std::fs::remove_file(format!("/data/omnipaxos_storage_{}/LOCK", *MY_PID));
-                                
-                                // Restart process (optional: implement restart logic)
-                                    std::process::exit(1);
-                            }
-                    
-                                    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
-                                }
-                            });
-                    
-                            // ✅ Start the server
-                            server.lock().await.run().await;
-                        } else {
-                            if let Err(e) = omni_paxos_result {
-                                println!("Failed to initialize OmniPaxos: {:?}", e);
-                            }
+                        let new_paxos_result = new_configuration.build_for_server(current_config, persistent_storage);
+                        if let Ok(new_omni_paxos) = new_paxos_result {
+                            println!("✅ Reconfiguration successful, new OmniPaxos instance created!");
                         }
-                        // ...
                     }
                 }
                 _ => {}
@@ -231,6 +195,39 @@ impl Server {
                 },
                 _ = tick_interval.tick() => {
                     self.omni_paxos.tick();
+                    let leader = self.omni_paxos.get_current_leader();
+                    let now = Instant::now();
+                    let expired_nodes: Vec<u64> = self.heartbeats
+                        .iter()
+                        .filter(|(_, last_seen)| now.duration_since(**last_seen) >= Duration::from_millis(100))
+                        .map(|(sender_id, _)| *sender_id)
+                        .collect();
+
+                    // Mark nodes as expired if they aren't already
+                    for sender_id in &expired_nodes {
+                        if !self.expired_nodes.contains(sender_id) {
+                            println!("Node {} is unresponsive. Marking for reconnection...", sender_id);
+                            self.expired_nodes.insert(*sender_id);
+                        }
+                    }
+
+                    // Keep retrying reconnection for expired nodes
+                    for sender_id in &self.expired_nodes {
+                        println!("Trying to reconnect to node {}...", sender_id);
+                        self.omni_paxos.reconnected(*sender_id);
+                    }
+
+                    // Remove expired heartbeats from tracking
+                    for sender_id in expired_nodes {
+                        self.heartbeats.remove(&sender_id);
+                    }
+                    if leader.is_none() {
+                        println!("No leader detected! Reconnecting node");
+                        let _ = std::fs::remove_file(format!("/data/omnipaxos_storage_{}/LOCK", *MY_PID));
+                                
+                        // Restart process (optional: implement restart logic)
+                        self.omni_paxos.reconnected(*MY_PID);
+                    }
                 },
                 else => (),
             }
@@ -243,6 +240,9 @@ impl Server {
             network: Network::new().await,
             database: Database::new(db_path),
             last_decided_idx: 0,
+            heartbeats: HashMap::new(),
+            expired_nodes: HashSet::new()
+            
         }
     }
 }
