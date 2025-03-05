@@ -53,10 +53,6 @@ impl Server {
                     }
                     KVCommand::Reconfigure(key) => {
                         println!("Received reconfigure {}", key);
-                        // let nodes_copy: Vec<u64> = NODES
-                        // .iter()
-                        // .cloned()
-                        // .collect();
                         let new_configuration = ClusterConfig {
                             configuration_id: 2,
                             nodes: vec![1,2,3,4],
@@ -70,7 +66,7 @@ impl Server {
                     }
                 },
                 Message::OmniPaxosMsg(msg) => {
-                    println!("omnipaxos msg {:?}", msg);
+                    // println!("omnipaxos msg {:?}", msg);
                     // if i am the leader
                     let leader = self.omni_paxos.get_current_leader();
                     let sender = msg.get_sender();
@@ -89,6 +85,7 @@ impl Server {
         let messages = self.omni_paxos.outgoing_messages();
         for msg in messages {
             let receiver = msg.get_receiver();
+            println!("Trying to send message to {} ", receiver);
             self.network
                 .send(receiver, Message::OmniPaxosMsg(msg))
                 .await;
@@ -206,7 +203,7 @@ impl Server {
                     // Mark nodes as expired if they aren't already
                     for sender_id in &expired_nodes {
                         if !self.expired_nodes.contains(sender_id) {
-                            println!("Node {} is unresponsive. Marking for reconnection...", sender_id);
+                            // println!("Node {} is unresponsive. Marking for reconnection...", sender_id);
                             self.expired_nodes.insert(*sender_id);
                         }
                     }
@@ -222,7 +219,7 @@ impl Server {
                         self.heartbeats.remove(&sender_id);
                     }
                     if leader.is_none() {
-                        println!("No leader detected! Reconnecting node");
+                        // println!("No leader detected! Reconnecting node");
                         let _ = std::fs::remove_file(format!("/data/omnipaxos_storage_{}/LOCK", *MY_PID));
                                 
                         // Restart process (optional: implement restart logic)
