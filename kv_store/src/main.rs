@@ -90,48 +90,8 @@ async fn main() {
 
     if let Ok(omni_paxos) = omni_paxos_result {
         // ✅ Use Arc<Mutex<T>> to allow multiple async tasks to access `server`
+        // let server = Server::new(omni_paxos, db_path).await;
         let server = Arc::new(Mutex::new(Server::new(omni_paxos, db_path).await));
-
-        // ✅ Clone `server` to avoid move issues
-        let server_clone = Arc::clone(&server);
-
-        tokio::spawn(async move {
-            loop {
-                let decided_idx;
-                let last_decided_idx;
-                let leader;
-
-                {
-                    let server_guard = server_clone.lock().await;
-                    decided_idx = server_guard.omni_paxos.get_decided_idx();
-                    last_decided_idx = server_guard.last_decided_idx as usize;
-                    leader = server_guard.omni_paxos.get_current_leader();
-                }
-
-                // ✅ Ensure logs are in sync
-                if decided_idx < last_decided_idx {
-                    println!("⚠️ Node is behind, requesting missing logs...");
-                    let mut server_guard = server_clone.lock().await;
-                    server_guard
-                        .omni_paxos
-                        .trim(Some(last_decided_idx))
-                        .expect("Trim failed!");
-                }
-
-                // ✅ Log leader status instead of calling trigger_election()
-                if leader.is_none() {
-                    println!("No leader detected! Restarting node to trigger election");
-            
-                    // Remove lock to allow restart
-                    let _ = std::fs::remove_file(format!("/data/omnipaxos_storage_{}/LOCK", *PID));
-                    
-                    // Restart process (optional: implement restart logic)
-                    std::process::exit(1);
-                }
-
-                tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
-            }
-        });
 
         // ✅ Start the server
         server.lock().await.run().await;
