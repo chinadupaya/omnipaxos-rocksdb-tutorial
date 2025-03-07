@@ -62,21 +62,27 @@ Cleanup:
 $ minikube delete --all
 ```
 
+## delete node
+```bash
+$ kubectl delete pod <kv-store-2>
+```
+Pod will be deleted and restart
+
 ## Add another pod:
 - Edit nodes config
 ```bash
 $ kubectl patch configmap kv-config --type merge -p '{"data":{"NODES":"[1,2,3,4]"}}'
 $ kubectl patch configmap kv-config --type merge -p '{"data":{"CONFIG_ID":"2"}}'
 ```
-
-- Attach to network-actor and input reconfigure. This tells it to send a stopsign that a new node will be added
-```bash
-$ reconfigure 8004
-```
 - increase to four pods
 ```bash
 $ kubectl scale statefulset kv-store --replicas=4
 ```
+- Attach to network-actor and input `reconfigure <PID>`. This tells it to send a stopsign that a new node will be added
+```bash
+$ reconfigure 4
+```
+
 ### Client
 Example network-actor CLI command:
 ```

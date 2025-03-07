@@ -63,8 +63,8 @@ async fn main() {
         server_config,
         cluster_config,
     };
-    let storage_path = format!("/data/omnipaxos_storage_{}", *PID);
-    let db_path = "/data/db";
+    let storage_path = format!("/data/omnipaxos_storage_{}_{}", *PID, *CONFIG_ID);
+    let db_path = format!("data/db{}",*CONFIG_ID);
 
     fn remove_lock_file(path: &str) {
         let lock_file = format!("{}/LOCK", path);
@@ -75,7 +75,7 @@ async fn main() {
     }
 
     remove_lock_file(&storage_path);
-    remove_lock_file(db_path);
+    remove_lock_file(&db_path);
 
     let persistent_storage_primary = PersistentStorage::open(PersistentStorageConfig::with_path(storage_path.clone()));
 
@@ -89,9 +89,7 @@ async fn main() {
     let omni_paxos_result = op_config.clone().build(persistent_storage);
 
     if let Ok(omni_paxos) = omni_paxos_result {
-        // ✅ Use Arc<Mutex<T>> to allow multiple async tasks to access `server`
-        // let server = Server::new(omni_paxos, db_path).await;
-        let server = Arc::new(Mutex::new(Server::new(omni_paxos, db_path).await));
+        let server = Arc::new(Mutex::new(Server::new(omni_paxos, &db_path).await));
 
         // ✅ Start the server
         server.lock().await.run().await;

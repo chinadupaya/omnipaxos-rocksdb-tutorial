@@ -9,7 +9,9 @@ use crate::{
 
 };
 
+use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::thread::current;
 use std::{env, fs};
@@ -36,7 +38,8 @@ pub struct Server {
     pub database: Database,
     pub last_decided_idx: u64,
     pub heartbeats: HashMap<u64, Instant>,
-    pub expired_nodes: HashSet<u64>
+    pub expired_nodes: HashSet<u64>,
+    pub running: Arc<AtomicBool>,
 }
 
 impl Server {
@@ -53,9 +56,21 @@ impl Server {
                     }
                     KVCommand::Reconfigure(key) => {
                         println!("Received reconfigure {}", key);
+                        let mut new_nodes = NODES.clone();
+                        if let Ok(new_node) = key.parse::<u64>() {
+                            if !new_nodes.contains(&new_node) {
+                                new_nodes.push(new_node);
+                                println!("Added node {} to NODES: {:?}", new_node, new_nodes);
+                            } else {
+                                println!("Node {} already exists in NODES", new_node);
+                            }
+                        } else {
+                            println!("Invalid node ID: {}", key);
+                            return;
+                        }
                         let new_configuration = ClusterConfig {
-                            configuration_id: 2,
-                            nodes: vec![1,2,3,4],
+                            configuration_id: *CONFIG_ID + 1,
+                            nodes: new_nodes,
                             ..Default::default()
                         };
                         let metadata = None;
@@ -67,8 +82,6 @@ impl Server {
                 },
                 Message::OmniPaxosMsg(msg) => {
                     // println!("omnipaxos msg {:?}", msg);
-                    // if i am the leader
-                    let leader = self.omni_paxos.get_current_leader();
                     let sender = msg.get_sender();
                     self.heartbeats.insert(sender, Instant::now());
                     self.expired_nodes.remove(&sender);
@@ -85,7 +98,7 @@ impl Server {
         let messages = self.omni_paxos.outgoing_messages();
         for msg in messages {
             let receiver = msg.get_receiver();
-            println!("Trying to send message to {} ", receiver);
+            // println!("Trying to send message to {} ", receiver);
             self.network
                 .send(receiver, Message::OmniPaxosMsg(msg))
                 .await;
@@ -105,12 +118,14 @@ impl Server {
                 self.last_decided_idx, new_decided_idx
             );
             if let Some(decided_entries) = self.omni_paxos.read_decided_suffix(self.last_decided_idx as usize) {
+                println!("Update db with decided entries");
                 self.update_database(decided_entries);
             } else {
                 println!("Warning: No decided entries found at index {}", self.last_decided_idx);
                 self.omni_paxos.reconnected(*MY_PID);
                 // self.omni_paxos.read
             }
+            println!("New decided index {}", new_decided_idx);
             self.last_decided_idx = new_decided_idx as u64;
             /*** reply client ***/
             let msg = Message::APIResponse(APIResponse::Decided(new_decided_idx as u64));
@@ -132,27 +147,42 @@ impl Server {
         }
     }
 
-    fn update_database(&self, decided_entries: Vec<LogEntry<KVCommand>>) {
+    fn update_database(&mut self, decided_entries: Vec<LogEntry<KVCommand>>) {
+        println!("Update database with decided entries function");
         for entry in decided_entries {
+            println!("New entry: {:?}", entry);
             match entry {
                 LogEntry::Decided(cmd) => {
                     self.database.handle_command(cmd);
                 }
-                LogEntry::StopSign(stopsign, true) => {
-                    println!("Received stopsign");
+                LogEntry::StopSign(stopsign, boolval) => {
+                    println!("Received stopsign with config id {:?}", stopsign.next_config.configuration_id);
+                    println!("Stopsign bool val: {}", boolval);
+                    println!("My config id {:?}", *CONFIG_ID);
                     
                     let new_configuration = stopsign.next_config.clone(); 
                     if new_configuration.nodes.contains(&MY_PID) && stopsign.next_config.configuration_id > *CONFIG_ID{
+                        println!("Starting reconfigure...");
                         // current configuration has been safely stopped. Start new instance
-                        // force restart
-                         // Remove lock to allow restart
-                        // let _ = std::fs::remove_file(format!("/data/omnipaxos_storage_{}/LOCK", *PID));
-                        
-                        // Restart process (optional: implement restart logic)
-                        // std::process::exit(1);
+                        self.stop();
+                        // take snapshot
+                        let new_decided_idx = self.omni_paxos.get_decided_idx();
 
-                        let storage_path = format!("/data/omnipaxos_storage_{}", *MY_PID);
-                        let db_path = "/data/db";
+                        println!(
+                            "Log before: {:?}",
+                            self.omni_paxos.read_decided_suffix(0).unwrap()
+                        );
+                        self.omni_paxos
+                            .snapshot(Some(new_decided_idx), true)
+                            .expect("Failed to snapshot");
+                        println!(
+                            "Log after: {:?}\n",
+                        self.omni_paxos.read_decided_suffix(0).unwrap()
+                        );
+
+
+                        let storage_path = format!("/data/omnipaxos_storage_{}_{}", *MY_PID, stopsign.next_config.configuration_id); // iterate yourself
+                        let db_path = format!("data/db{}",stopsign.next_config.configuration_id);
                         fn remove_lock_file(path: &str) {
                             let lock_file = format!("{}/LOCK", path);
                             if std::path::Path::new(&lock_file).exists() {
@@ -161,9 +191,9 @@ impl Server {
                             }
                         }
                         remove_lock_file(&storage_path);
-                        remove_lock_file(db_path);
+                        remove_lock_file(&db_path);
                         
-                        let persistent_storage: PersistentStorage<KVCommand> = PersistentStorage::open(PersistentStorageConfig::with_path(storage_path.clone()));
+                        let persistent_storage: PersistentStorage<KVCommand> = PersistentStorage::new(PersistentStorageConfig::with_path(storage_path.clone()));
                         let current_config = ServerConfig {
                             pid: *MY_PID,
                             ..Default::default()
@@ -171,6 +201,16 @@ impl Server {
                         let new_paxos_result = new_configuration.build_for_server(current_config, persistent_storage);
                         if let Ok(new_omni_paxos) = new_paxos_result {
                             println!("✅ Reconfiguration successful, new OmniPaxos instance created!");
+                            self.omni_paxos = new_omni_paxos;
+                            self.database = Database::new(&db_path);
+                            self.last_decided_idx = 0;
+                            self.heartbeats.clear();
+                            self.expired_nodes.clear();
+                            self.start();
+
+                            println!("✅ Reconfiguration successful, server state updated!");
+                            // force restart for env variables to reflect
+                            std::process::exit(1);
                         }
                     }
                 }
@@ -179,10 +219,18 @@ impl Server {
         }
     }
 
+   
+    pub fn stop(&self) {
+        self.running.store(false, std::sync::atomic::Ordering::Relaxed);
+    }
+    pub fn start(&self) {
+        self.running.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
     pub(crate) async fn run(&mut self) {
         let mut msg_interval = time::interval(Duration::from_millis(1));
         let mut tick_interval = time::interval(Duration::from_millis(10));
-        loop {
+        while self.running.load(std::sync::atomic::Ordering::Relaxed) {
             tokio::select! {
                 biased;
                 _ = msg_interval.tick() => {
@@ -238,7 +286,8 @@ impl Server {
             database: Database::new(db_path),
             last_decided_idx: 0,
             heartbeats: HashMap::new(),
-            expired_nodes: HashSet::new()
+            expired_nodes: HashSet::new(),
+            running: Arc::new(AtomicBool::new(true))
             
         }
     }

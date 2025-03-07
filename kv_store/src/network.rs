@@ -120,7 +120,7 @@ impl Network {
                 let mut data = Vec::new();
                 loop {
                     data.clear();
-                    println!("🔄 Waiting to receive data from {}", peer_clone);
+                    // println!("🔄 Waiting to receive data from {}", peer_clone);
 
                     let timeout_duration = tokio::time::Duration::from_secs(5);
                     match tokio::time::timeout(timeout_duration, reader.read_until(b'\n', &mut data)).await {
@@ -131,7 +131,7 @@ impl Network {
                         }
                         // Successfully read data
                         Ok(Ok(_)) => {
-                            println!("Stream alive with {}", peer_clone);
+                            // println!("Stream alive with {}", peer_clone);
                             if let Ok(msg) = serde_json::from_slice::<Message>(&data) {
                                 msg_buf.lock().await.push(msg);
                             }
