@@ -24,6 +24,7 @@ impl Database {
                 None
             }
             KVCommand::Get(key) => self.get(key.as_str()),
+            _ => unimplemented!(),
         }
     }
 

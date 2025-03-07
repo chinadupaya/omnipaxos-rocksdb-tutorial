@@ -24,7 +24,32 @@ Attach to the client (`network-actor`) to send requests to the cluster:
 $ docker attach network-actor
 ```
 
-It is also possible to run with kubernetes:
+# Build new image in the kv_store folder:
+
+```bash
+$ docker build -t kvs .
+```
+Sometimes it's better to rebuild completely from scratch: 
+```bash
+$ docker build -t kvs . --no-cache
+```
+```bash
+$ docker tag kvs:latest chinadupaya/kvs:latest
+$ docker push chinadupaya/kvs:latest
+```
+
+# Build new image in the network_actor folder:
+```bash
+$ docker build -t kvs-network-actor .
+$ docker tag kvs-network-actor:latest chinadupaya/kvs-network-actor
+$ docker push chinadupaya/kvs-network-actor:latest
+```
+
+# With Minikube:
+```bash
+$ minikube start
+```
+
 ```bash
 $ kubectl create -f kube.yml 
 ```
@@ -32,9 +57,30 @@ Attach to the client (`network-actor`) to send requests to the cluster:
 ```bash
 $ kubectl attach -it net
 ```
-Kill a pod:
+Cleanup:
 ```bash
-$ kubectl delete pod <podname>
+$ minikube delete --all
+```
+
+## delete node
+```bash
+$ kubectl delete pod <kv-store-2>
+```
+Pod will be deleted and restart
+
+## Add another pod:
+- Edit nodes config
+```bash
+$ kubectl patch configmap kv-config --type merge -p '{"data":{"NODES":"[1,2,3,4]"}}'
+$ kubectl patch configmap kv-config --type merge -p '{"data":{"CONFIG_ID":"2"}}'
+```
+- increase to four pods
+```bash
+$ kubectl scale statefulset kv-store --replicas=4
+```
+- Attach to network-actor and input `reconfigure <PID>`. This tells it to send a stopsign that a new node will be added
+```bash
+$ reconfigure 4
 ```
 
 ### Client

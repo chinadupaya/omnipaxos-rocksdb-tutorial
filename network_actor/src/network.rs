@@ -60,7 +60,7 @@ pub async fn run() {
         loop {
             // Get input
             let mut input = String::new();
-            print!("Type a command here <put/delete/get> <args>: ");
+            print!("Type a command here <put/delete/get/reconfigure> <args>: ");
             let _ = stdout().flush();
             let mut reader = BufReader::new(tokio::io::stdin());
             reader
@@ -223,8 +223,13 @@ fn parse_command(line: String) -> Result<(KVCommand, Option<u64>), ParseCommandE
         }
         "help" => {
             return Err(ParseCommandError(
-                "Commands: put <key> <value>, get <key>, delete <key> (optional <port>)".into(),
+                "Commands: put <key> <value>, get <key>, delete <key> (optional <port>), reconfigure <key> ".into(),
             ));
+        }
+        "reconfigure" => {
+            let value = words.next().ok_or(ParseCommandError("Not enough arguments".to_string()))?;
+            let port = words.next().map(|x| x.parse::<u64>().unwrap());
+            (KVCommand::Reconfigure(value.to_string()), port.into())
         }
         _ => Err(ParseCommandError("Invalid command type".to_string()))?,
     };

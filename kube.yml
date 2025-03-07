@@ -4,7 +4,23 @@ metadata:
   name: kv-config
 data:
   NODES: "[1, 2, 3]"
+  CONFIG_ID: "1"
   RUST_BACKTRACE: "1"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kv-store
+  labels:
+    app: kv-store
+spec:
+  clusterIP: None  # Headless service, required for StatefulSet DNS
+  selector:
+    app: kv-store
+  ports:
+    - name: "api"
+      port: 8080
+      targetPort: 8080
 ---
 apiVersion: v1
 kind: Service
@@ -20,53 +36,51 @@ spec:
     - name: "8001"
       port: 8001
       targetPort: 8001
-    - port: 8002
+    - name: "8002"
+      port: 8002
       targetPort: 8002
-      name: "8002"
-    - port: 8003
-      name: "8003"
+    - name: "8003"
+      port: 8003
       targetPort: 8003
-      name: "8003"
-    - port: 8004
+    - name: "8004"
+      port: 8004
       targetPort: 8004
-      name: "8004"
-    - port: 8013
-      targetPort: 8013
-      name: "8013"
-    - port: 8012
+    - name: "8012"
+      port: 8012
       targetPort: 8012
-      name: "8012"
-    - port: 8014
+    - name: "8013"
+      port: 8013
+      targetPort: 8013
+    - name: "8014"
+      port: 8014
       targetPort: 8014
-      name: "8014"
-    - port: 8023
-      targetPort: 8023
-      name: "8023"
-    - port: 8021
+    - name: "8021"
+      port: 8021
       targetPort: 8021
-      name: "8021"
-    - port: 8024
+    - name: "8023"
+      port: 8023
+      targetPort: 8023
+    - name: "8024"
+      port: 8024
       targetPort: 8024
-      name: "8024"
-    - port: 8032
-      targetPort: 8032
-      name: "8032"
-    - port: 8031
+    - name: "8031"
+      port: 8031
       targetPort: 8031
-      name: "8031"
-    - port: 8034
+    - name: "8032"
+      port: 8032
+      targetPort: 8032
+    - name: "8034"
+      port: 8034
       targetPort: 8034
-      name: "8034"
-    - port: 8043
-      targetPort: 8043
-      name: "8043"
-    - port: 8041
+    - name: "8041"
+      port: 8041
       targetPort: 8041
-      name: "8041"
-    - port: 8042
+    - name: "8042"
+      port: 8042
       targetPort: 8042
-      name: "8042"
-
+    - name: "8043"
+      port: 8043
+      targetPort: 8043
 ---
 apiVersion: v1
 kind: Pod
@@ -77,7 +91,7 @@ metadata:
 spec:
   containers:
     - name: net
-      image: arejula27/kvs-network-actor:v1.3
+      image: chinadupaya/kvs-network-actor:latest
       imagePullPolicy: Always
       stdin: true
       tty: true
@@ -92,12 +106,11 @@ spec:
         - containerPort: 8021
         - containerPort: 8032
         - containerPort: 8031
-
       env:
         - name: PORT_MAPPINGS
-          value: "[[8013,8031],[8012,8021],[8023,8032], [8014, 8041], [8024, 8042], [8034, 8043]]"
+          value: "[[8013,8031],[8012,8021],[8023,8032],[8014,8041],[8024,8042],[8034,8043]]"
         - name: CLIENT_PORTS
-          value: "[8001, 8002, 8003, 8004]"
+          value: "[8001,8002,8003,8004]"
         - name: NODES  
           valueFrom:
             configMapKeyRef:
@@ -109,7 +122,6 @@ spec:
               name: kv-config
               key: RUST_BACKTRACE
 ---
-
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -125,9 +137,10 @@ spec:
       labels:
         app: kv-store
     spec:
+      restartPolicy: Always  # Ensures pod restarts instead of fresh creation
       containers:
         - name: kv-store
-          image: arejula27/kvs:v1.1 # Replace with your actual image
+          image: chinadupaya/kvs:latest  # Replace with your actual image
           imagePullPolicy: Always
           env:
             - name: NODES
@@ -144,6 +157,25 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: CONFIG_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: kv-config
+                  key: CONFIG_ID
           command: ["/bin/sh", "-c"]
           # As the program does not allow to have PID=0, we need to increment the PID by 1
-          args: ["export PID=$(echo $POD_NAME | sed 's/[^0-9]*\\([0-9]*\\)$/\\1/')&& PID=$((PID + 1)) && exec kv_demo"]
+          args: ["export PID=$(echo $POD_NAME | sed 's/[^0-9]*\\([0-9]*\\)$/\\1/') && PID=$((PID + 1)) && exec kv_demo"]
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: omnipaxos-storage
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: omnipaxos-storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 1Gi
