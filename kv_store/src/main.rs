@@ -63,7 +63,7 @@ async fn main() {
         server_config,
         cluster_config,
     };
-    let storage_path = format!("/data/omnipaxos_storage_{}_{}", *PID, *CONFIG_ID);
+    let storage_path = format!("/data/kv_storage_{}_{}", *PID, *CONFIG_ID);
     let db_path = format!("data/db{}",*CONFIG_ID);
 
     fn remove_lock_file(path: &str) {
