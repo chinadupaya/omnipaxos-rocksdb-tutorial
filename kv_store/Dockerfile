@@ -1,4 +1,4 @@
-FROM rust:1.70 as builder
+FROM rust:1.85 as builder
 WORKDIR /usr/src/kv_demo
 
 RUN set -eux; \
@@ -18,6 +18,6 @@ RUN rm ./src/*.rs ./target/release/deps/kv_demo*
 COPY . .
 RUN cargo install --path .
 
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 COPY --from=builder /usr/local/cargo/bin/kv_demo /usr/local/bin/kv_demo
 CMD ["kv_demo"]

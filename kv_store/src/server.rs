@@ -9,15 +9,11 @@ use crate::{
 
 };
 
-use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use std::thread::current;
-use std::{env, fs};
 use tokio::sync::Mutex;
-// use omnipaxos::messages::ballot_leader_election::{BLEMessage, HeartbeatMsg };
-use omnipaxos::messages::ballot_leader_election::*;
+use std::fs;
 
 use omnipaxos_storage::persistent_storage::{PersistentStorage, PersistentStorageConfig};
 use omnipaxos::{ClusterConfig, ServerConfig};
@@ -34,6 +30,7 @@ pub enum APIResponse {
 
 pub struct Server {
     pub omni_paxos: OmniPaxosKV,
+    // pub network: Arc<Mutex<Network>>,
     pub network: Network,
     pub database: Database,
     pub last_decided_idx: u64,
@@ -181,7 +178,7 @@ impl Server {
                         );
 
 
-                        let storage_path = format!("/data/omnipaxos_storage_{}_{}", *MY_PID, stopsign.next_config.configuration_id); // iterate yourself
+                        let storage_path = format!("/data/kv_storage_{}_{}", *MY_PID, stopsign.next_config.configuration_id); // iterate yourself
                         let db_path = format!("data/db{}",stopsign.next_config.configuration_id);
                         fn remove_lock_file(path: &str) {
                             let lock_file = format!("{}/LOCK", path);
@@ -230,6 +227,7 @@ impl Server {
     pub(crate) async fn run(&mut self) {
         let mut msg_interval = time::interval(Duration::from_millis(1));
         let mut tick_interval = time::interval(Duration::from_millis(10));
+        let mut cluster_interval = time::interval(Duration::from_secs(10));
         while self.running.load(std::sync::atomic::Ordering::Relaxed) {
             tokio::select! {
                 biased;
@@ -237,6 +235,27 @@ impl Server {
                     self.process_incoming_msgs().await;
                     self.send_outgoing_msgs().await;
                     self.handle_decided_entries().await;
+                },
+                _ = cluster_interval.tick() => {
+
+                    let new_pod_check = self.network.check_pods().await;
+                    if new_pod_check > 0 {
+                        println!("Received reconfigure {}", new_pod_check);
+                        let mut new_nodes = NODES.clone();
+                        if !new_nodes.contains(&new_pod_check) {
+                            new_nodes.push(new_pod_check);
+                            println!("Added node {} to NODES: {:?}", new_pod_check, new_nodes);
+                        } else {
+                            println!("Node {} already exists in NODES", new_pod_check);
+                        }
+                        let new_configuration = ClusterConfig {
+                            configuration_id: *CONFIG_ID + 1,
+                            nodes: new_nodes,
+                            ..Default::default()
+                        };
+                        let metadata = None;
+                        self.omni_paxos.reconfigure(new_configuration, metadata).expect("Failed to propose reconfiguration");
+                    }
                 },
                 _ = tick_interval.tick() => {
                     self.omni_paxos.tick();

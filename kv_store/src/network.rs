@@ -1,16 +1,17 @@
+use kube::{api::{Api, WatchEvent, WatchParams, ListParams},Client, runtime::watcher};
+use k8s_openapi::api::core::v1::Pod;
+use futures::{Stream, StreamExt, TryStreamExt};
 use omnipaxos::messages::Message as OPMessage;
 use serde::{Deserialize, Serialize};
 use serde_json;
-use std::collections::HashMap;
+use std::{collections::HashMap, hash::Hash};
 use std::sync::Arc;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::{tcp, TcpStream},
     sync::Mutex,
-    time::{timeout, Duration}
+    time::Duration
 };
-
-use std::io::ErrorKind;
 
 use crate::{kv::KVCommand, server::APIResponse, NODES, PID as MY_PID};
 
@@ -54,6 +55,51 @@ impl Network {
         }
     }
 
+    pub(crate) async fn check_pods(&mut self) -> u64 {
+        let client = Client::try_default().await.unwrap();
+        let pods: Api<Pod> = Api::default_namespaced(client);
+        let pod_list = pods.list(&ListParams::default()).await.unwrap();
+    
+        // Collect the list of peer PIDs
+        let peers: Vec<u64> = NODES
+            .iter()
+            .filter(|pid| **pid != *MY_PID)
+            .cloned()
+            .collect();
+
+        let mut return_val: u64 = 0;
+    
+        for pod in pod_list.items {
+            if let Some(pod_name) = &pod.metadata.name {
+                if pod_name.starts_with("kv-store") && *pod_name != format!("kv-store-{}", *MY_PID - 1) {
+                    
+                    let parts: Vec<&str> = pod_name.split('-').collect();
+                    if parts.len() < 3 {
+                        println!("Skipping pod {}: Invalid name format", pod_name);
+                        continue;
+                    }
+    
+                    let temp_pid: u64 = match parts[2].parse::<u64>() {
+                        Ok(pid) => pid + 1, // Ensure PID is non-zero
+                        Err(_) => {
+                            println!("Skipping pod {}: Invalid PID", pod_name);
+                            continue;
+                        }
+                    };
+    
+                    // Check if temp_pid exists in peers
+                    if peers.contains(&temp_pid) {
+                        println!("Detected new peer pod: {} with PID {}", pod_name, temp_pid);
+                    } else {
+                        println!("Pod {} is not in the peer list, sending reconfigure request.", pod_name);
+                        return_val = temp_pid;
+                    }
+                }
+            }
+        }
+        return return_val;
+    }
+    
     /// Returns all messages received since last called.
     pub(crate) async fn get_received(&mut self) -> Vec<Message> {
         let mut buf = self.incoming_msg_buf.lock().await;
@@ -126,7 +172,7 @@ impl Network {
                     match tokio::time::timeout(timeout_duration, reader.read_until(b'\n', &mut data)).await {
                         // The connection was closed (zero bytes read)
                         Ok(Ok(0)) => {
-                            println!("❌ Connection lost with {}. Attempting to reconnect...", peer_clone);
+                            println!("Connection lost with {}. Attempting to reconnect...", peer_clone);
                             break;
                         }
                         // Successfully read data
@@ -154,5 +200,6 @@ impl Network {
             api_socket,
             incoming_msg_buf,
         }
+        
     }
 }
