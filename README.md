@@ -4,7 +4,7 @@ This is a small demo of how to transform a simple single-server RocksDB service 
 ## Members
 - Annysia Dupaya - Code, Report
 - Gnanapalaniselvi - Report, Testing
-- Tomas Sobral Teixeira
+- Tomas Sobral Teixeira - Code
 
 Related resources:
 - [Blog post](https://omnipaxos.com/blog/building-distributed-rocksdb-with-omnipaxos-in-8-minutes/)
