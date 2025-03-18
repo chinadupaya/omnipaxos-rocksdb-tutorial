@@ -1,6 +1,11 @@
 # OmniPaxos Demo
 This is a small demo of how to transform a simple single-server RocksDB service into a distributed version using OmniPaxos.
 
+## Members
+- Annysia Dupaya - Code, Report
+- Gnanapalaniselvi - Report, Testing
+- Tomas Sobral Teixeira
+
 Related resources:
 - [Blog post](https://omnipaxos.com/blog/building-distributed-rocksdb-with-omnipaxos-in-8-minutes/)
 - [Video](https://youtu.be/4VqB0-KOsms)
@@ -8,21 +13,9 @@ Related resources:
 ## Requirements
 We used the following:
 - Docker v.4.19.0 (for demo)
-- Rust 1.71.0 (for development)
-
-
+- Rust 1.80.0 (for development)
 
 # Demos
-Build images and start containers in detached mode:
-```bash
-$ docker compose up --build -d
-```
-(Note: Running this command for the first time can take a couple of minutes)
-
-Attach to the client (`network-actor`) to send requests to the cluster:
-```bash
-$ docker attach network-actor
-```
 
 # Build new image in the kv_store folder:
 
