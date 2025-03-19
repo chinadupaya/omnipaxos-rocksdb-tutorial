@@ -2,7 +2,7 @@
 This is a small demo of how to transform a simple single-server RocksDB service into a distributed version using OmniPaxos.
 
 ## Members
-- Annysia Dupaya - Code, Report
+- Annysia Dupaya - Code (Failover, Persistent Storage, Reconfigure, Auto Reconfigure), Report
 - Gnanapalaniselvi - Report, Testing
 - Tomas Sobral Teixeira - Code
 
